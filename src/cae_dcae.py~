@@ -1,0 +1,81 @@
+import torch 
+import torchvision
+import torch.nn as nn 
+from torchvision import transforms
+import random
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
+import torch.nn.functional as F
+
+import torch
+from torch.utils.data import Dataset
+from torchvision.transforms import Compose, ToTensor
+
+
+class Flatten(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), -1)
+
+class Unflatten(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), 32, 16, 16)  
+
+
+class CAE(nn.Module):
+    def __init__(self, latent_dim: int):
+        super(CAE, self).__init__()
+        
+        self.encode_layer = nn.Sequential(
+            nn.Conv2d(in_channels = 3, out_channels = 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(16),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(in_channels = 16, out_channels = 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(in_channels = 32, out_channels = 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(in_channels = 32, out_channels = 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d(2, 2),
+            Flatten(),
+            nn.Linear(8192, latent_dim)
+        )
+
+        self.decode_layer = nn.Sequential(
+            nn.Linear(1000, latent_dim),
+            Unflatten(),
+            nn.ConvTranspose2d(in_channels = 32, out_channels = 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels = 64, out_channels = 64, kernel_size=3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels = 64, out_channels = 64, kernel_size=5, padding=1, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels = 64, out_channels = 64, kernel_size=5, padding=1, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels = 64, out_channels = 3, kernel_size=4, padding=0, stride=2),
+            nn.Sigmoid()
+        )
+
+
+    def sample_z(self, y):
+        z = self.encode_layer(y)
+        return z
+        
+    def forward(self, y):
+        """Forward function of CAE class.
+
+        Args:
+          y: a batch of input images. 
+        
+        Returns:
+          yhat: the batch of reconstructed images.
+        """
+        z = self.encode_layer(y)
+        yout = self.decode_layer(z)
+        return yout
+

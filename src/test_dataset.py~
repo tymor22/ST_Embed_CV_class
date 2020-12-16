@@ -1,0 +1,52 @@
+import torch 
+import torchvision
+import torch.nn as nn 
+from IPython.display import Image 
+from torchvision import transforms
+import matplotlib.pyplot as plt
+import random
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+import torch.nn.functional as F
+
+import sys
+import os
+import csv
+import numpy as np
+
+import torch
+from torch.utils.data import Dataset
+from torchvision.transforms import Compose, ToTensor
+
+from PIL import Image
+
+import pandas as pd
+import linecache
+import re
+
+from count_vae import CountVAE 
+from datasets import STDataset_triple
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+seed = 12345
+random.seed(seed)
+torch.manual_seed(seed)
+
+########## Data set loading #########################################################
+
+metafile = "../data/meta_train.tsv"
+dat1 = STDataset_triple(metafile)
+train_loader = DataLoader(dat1, batch_size=32, shuffle=False)
+
+# Generate metadata files for train/test set and instantiate Datasets/DataLoaders
+for i, sample_batched in enumerate(train_loader):
+    try:
+        images, data, annotation, k_distant, k_near = sample_batched
+    except ValueError:
+        print(i)
+        
+
+
+
+    
+

@@ -1,0 +1,110 @@
+import torch 
+import torchvision
+import torch.nn as nn 
+from IPython.display import Image 
+from torchvision import transforms
+import matplotlib.pyplot as plt
+import random
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+import torch.nn.functional as F
+
+import sys
+import os
+import csv
+import numpy as np
+
+import torch
+from torch.utils.data import Dataset
+from torchvision.transforms import Compose, ToTensor
+
+from PIL import Image
+
+import pandas as pd
+import linecache
+import re
+
+from count_vae_no_concat import CountVAE 
+from datasets import STDataset_triple
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+seed = 12345
+random.seed(seed)
+torch.manual_seed(seed)
+
+
+metafile = "../data/meta_train.tsv"
+dat1 = STDataset_triple(metafile, iso_cutoff=1.2)
+train_loader = DataLoader(dat1, batch_size=32, shuffle=False)
+
+# Generate metadata files for train/test set and instantiate Datasets/DataLoaders
+
+
+########## Pretrained Vision Model loading, count VAE initialization ################## 
+n_latent = 20
+
+#Initialize count VAE model
+nnet_model = CountVAE(
+            11162, n_layers = 1, n_latent=20, n_hidden=256, gene_likelihood="zinb", dropout_rate=.1,
+            n_labels=1
+        ).to(device)
+
+
+######### Parameters to optimize for ##################################################
+
+adam_param_list = []
+adam_param_list.append({'params': nnet_model.parameters()})
+
+
+learning_rate = 1e-3
+optimiser = torch.optim.Adam(adam_param_list, lr=learning_rate)
+
+
+######## Training of model ############################################################
+
+def train_joint_vae(nnet, train_loader, optimiser, epoch, num_epoch, learning_rate, log_interval):
+
+    count_loss_sum = 0
+    trip_loss_sum = 0
+    net_loss_sum = 0
+    triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
+
+
+    for i, sample_batched in enumerate(train_loader):
+        
+        optimiser.zero_grad()
+        
+        images, data, annotation, k_distant, k_near = sample_batched
+        images = images.to(device)
+        data = data.type(torch.float32).to(device) 
+        library = torch.log(torch.sum(data, 1) + 1.0).unsqueeze(1).to(device)
+
+        reconst_loss_train, kl_divergence_train = nnet_model(data, library)
+        train_loss = torch.mean(reconst_loss_train + kl_divergence_train)
+
+        train_loss.backward()
+        optimiser.step()
+        
+        if (i + 1) % log_interval == 0:
+            print('Epoch [{}/{}], Train loss:{:.6f}'.format(
+                epoch + 1, num_epoch, 
+                train_loss.item()
+            ))
+
+    save_path_nnet = "/mnt/home/thamamsy/projects/ST_Embed/models/count_only/count_nnet_" + str(epoch) + '.pth' 
+    
+    torch.save(
+      nnet_model.state_dict(),
+      save_path_nnet
+    )
+    
+#Train loop
+num_epoch = 40
+log_interval = 10
+
+
+for epoch in range(num_epoch):
+    train_joint_vae(nnet_model, train_loader, optimiser, epoch, num_epoch, learning_rate, log_interval)
+    
+    
+
